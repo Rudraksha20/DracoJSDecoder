@@ -41,7 +41,8 @@ function DecoderBuffer(buffer, data_size) {
                 return false;
             }
         }
-
+        
+        debugger;
         if(!DecodeVarint(position, number_of_faces, this.buffer, data_size, 'num_faces', true)) {
             console.log("Error: Error while decoding the num_faces value");
             return false;
@@ -50,9 +51,6 @@ function DecoderBuffer(buffer, data_size) {
             console.log("Error: Error while decoding num_points value");
             return false;
         }
-        console.log(number_of_points.num_points);
-        console.log(number_of_faces.num_faces);
-        console.log((1 << 16));
         // TODO: Check that num_faces and num_points are valid values
         // This needs a support fro 64 bit numbers in JS.
 
@@ -236,11 +234,10 @@ function Decoder(input_file, output_file) {
         }
     
         // Get the flags
-        if(!DecodeValue(decode_buffer.buffer, Header, decode_buffer.data_size, position, 1, 'flags')) {
+        if(!DecodeValue(decode_buffer.buffer, Header, decode_buffer.data_size, position, Header.flags.BYTES_PER_ELEMENT, 'flags')) {
             console.log("Error: Error while decoding header flags.");
             return false;
         }
-
         return true;
     }
 
