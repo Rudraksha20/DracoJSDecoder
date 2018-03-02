@@ -122,14 +122,34 @@ function DecodeVarint(position, out_value, buffer, data_size, attribute_name, un
             // Last byte reached
             out_value[attribute_name] = in_value.in_val;
         }
-    } // TODO
-    // else {
-    //     // Input is a signed value. Decode the symbol and convert to signed.
-    //     typename std::make_unsigned<IntTypeT>::type symbol;
-    //     if (!DecodeVarint(&symbol, buffer))
-    //     return false;
-    //     *out_val = ConvertSymbolToSignedInt(symbol);
-    // }
+
+    } else {
+        // Input is a signed value. Decode the symbol and convert to signed.
+        // Temp convert signed to unsigned value
+        var temp_out_val = {
+            val
+        }
+        if(out_value[attribute_name].BYTES_PER_ELEMENT == 1) {
+            temp_out_val.val = new Uint8Array(1);
+        } else if(out_value[attribute_name].BYTES_PER_ELEMENT == 2) {
+            temp_out_val.val = new Uint16Array(1);
+        } else if(out_value[attribute_name].BYTES_PER_ELEMENT == 4) {
+            temp_out_val.val = new Uint32Array(1);
+        }
+
+        if(!DecodeVarint(position, temp_out_val, buffer, data_size, 'val', true)) {
+            return false;
+        }
+
+        if(out_value[attribute_name].BYTES_PER_ELEMENT == 1) {
+            out_value[attribute_name] = new Int8Array(temp_out_val.val);
+        } else if(out_value[attribute_name].BYTES_PER_ELEMENT == 2) {
+            out_value[attribute_name] = new Int16Array(temp_out_val.val);
+        } else if(out_value[attribute_name].BYTES_PER_ELEMENT == 4) {
+            out_value[attribute_name] = new Int32Array(temp_out_val.val);
+        }
+
+    }
     return true;
 }
 
