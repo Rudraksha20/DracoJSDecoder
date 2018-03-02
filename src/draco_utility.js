@@ -26,10 +26,17 @@ function DecodeValue(buffer, out_value, data_size, position, size, attribute_nam
         return false;
     }
 
-    for(let i = position.pos, j = 0; i < position.pos + size; i++, j++) {
-        out_value[attribute_name][j] = buffer.slice(i, i+1)[0];
+    let temp = new Uint8Array(size);
+
+    for(let i = position.pos, j = (size -1); i < position.pos + size; i++, j--) {
+        temp[j] = buffer.slice(i, i+1)[0];
     }
 
+    for(let k = 0; k < size; k++) {
+        out_value[attribute_name][0] <<= (8*k);
+        out_value[attribute_name][0] |= temp[k];
+    }
+    
     position.pos += size;
     return true;
 }

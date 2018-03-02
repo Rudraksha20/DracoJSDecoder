@@ -16,6 +16,8 @@ function DecoderBuffer(buffer, data_size) {
     this.buffer = buffer;
     this.data_size = data_size;
     this.bitstream_version = new Uint16Array(1);
+    this.num_faces;
+    this.num_points;
 
     this.SetBitstreamVersion = function(version_major, version_minor) {
         this.bitstream_version[0] = DracoBitstreamVersion(version_major, version_minor);
@@ -29,7 +31,7 @@ function DecoderBuffer(buffer, data_size) {
         var number_of_points = {
             num_points : new Uint32Array(1)
         };
-        
+
         // Backwards compatibility
         if(this.bitstream_version < DracoBitstreamVersion(2, 2)) {
             if(DecodeValue(buffer, number_of_faces, data_size, position, 1, 'num_faces')) {
@@ -41,8 +43,7 @@ function DecoderBuffer(buffer, data_size) {
                 return false;
             }
         }
-        
-        debugger;
+
         if(!DecodeVarint(position, number_of_faces, this.buffer, data_size, 'num_faces', true)) {
             console.log("Error: Error while decoding the num_faces value");
             return false;
@@ -51,8 +52,13 @@ function DecoderBuffer(buffer, data_size) {
             console.log("Error: Error while decoding num_points value");
             return false;
         }
+
         // TODO: Check that num_faces and num_points are valid values
         // This needs a support fro 64 bit numbers in JS.
+
+        // Store the number of faces and number of points value
+        this.num_faces = number_of_faces.num_faces;
+        this.num_points = number_of_points.num_points;
 
         // Decode the connectivity method
         var connect_method = {
@@ -89,13 +95,14 @@ function DecoderBuffer(buffer, data_size) {
                 }
             } else if (number_of_points.num_points < (1 << 16)) {
                 // Decode indices as Uint16Array
+                debugger;
                 for(let i = 0; i < number_of_faces.num_faces; i++) {
                     var face = new Array(new Uint32Array(1), new Uint32Array(1), new Uint32Array(1));
                     for(let j = 0; j < 3; j++) {
                         var temp_val = {
                             val : new Uint16Array(1)
                         }
-                        if(!DecodeValue(this.buffer, temp_val, data_size, position, 1, 'val')) {
+                        if(!DecodeValue(this.buffer, temp_val, data_size, position, temp_val.val.BYTES_PER_ELEMENT, 'val')) {
                             console.log("Error: Error while decoding sequential indices");
                             return false;
                         }
