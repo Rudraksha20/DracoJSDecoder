@@ -28,8 +28,8 @@ Draco is released as C++ source code that can be used to compress 3D graphics as
 
 _**Contents**_
 
-    * Building [#building]
-    * Run [#run]
+    * Building
+    * Run
 
 Building
 ========
