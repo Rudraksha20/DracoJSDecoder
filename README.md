@@ -36,15 +36,13 @@ Building
 
 Clone this repository to your computer and open terminal or command prompt and `cd` into the `src` directory inside the Draco decoder. 
 
-Windows
--------
+#### Windows
 
 On your windows computer after the previous step you would first need to install `node` on your system.
 
 [Here](http://blog.teamtreehouse.com/install-node-js-npm-windows) is a good tutorial by Dave McFarland on how to install node on your system.
 
-MacOS
--------
+#### MacOS
 
 You would first need to install node on your mac computer.
 
