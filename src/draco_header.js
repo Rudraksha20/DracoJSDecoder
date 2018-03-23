@@ -54,7 +54,7 @@ function DecoderBuffer(buffer, data_size) {
         }
 
         // TODO: Check that num_faces and num_points are valid values
-        // This needs a support fro 64 bit numbers in JS.
+        // This needs a support for 64 bit numbers in JS.
 
         // Store the number of faces and number of points value
         this.num_faces = number_of_faces.num_faces;
@@ -188,9 +188,9 @@ function DecoderBuffer(buffer, data_size) {
 
 }
 
-function Decoder(input_file, output_file) {
+function Decoder(input_file) {
     this.input_file_location = input_file;
-    this.output_file_location = output_file;
+    // this.output_file_location = output_file;
 
     // Decoding variables
     var decode_buffer;
@@ -280,6 +280,9 @@ function Decoder(input_file, output_file) {
             console.log("Error: Error while decoding Connectivity data");
             return false;
         }
+
+        // Decode Attributes
+        
 
         return true;
     }
