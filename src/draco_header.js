@@ -9,8 +9,8 @@ var {METADATA_FLAG_MASK} = require('./draco_utility.js');
 var {position} = require('./draco_utility.js');
 var {DecodeVarint} = require('./draco_utility.js');
 var {Header} = require('./draco_utility.js');
+var {DecodeSymbols} = require('./draco_utility.js');
 var {DecodeHeaderDRACOString} = require('./draco_utility.js');
-var {Mesh} = require('./draco_utility.js');
 
 function DecoderBuffer(buffer, data_size) {
     this.buffer = buffer;
@@ -18,6 +18,7 @@ function DecoderBuffer(buffer, data_size) {
     this.bitstream_version = new Uint16Array(1);
     this.num_faces;
     this.num_points;
+    this.mesh = new Array();
 
     this.SetBitstreamVersion = function(version_major, version_minor) {
         this.bitstream_version[0] = DracoBitstreamVersion(version_major, version_minor);
@@ -34,11 +35,11 @@ function DecoderBuffer(buffer, data_size) {
 
         // Backwards compatibility
         if(this.bitstream_version < DracoBitstreamVersion(2, 2)) {
-            if(DecodeValue(buffer, number_of_faces, data_size, position, 1, 'num_faces')) {
+            if(DecodeValue(buffer, number_of_faces, data_size, position, number_of_faces.num_faces.BYTES_PER_ELEMENT, 'num_faces')) {
                 console.log("Error: Error while decoding the num_faces value");
                 return false;
             }
-            if(DecodeValue(buffer, number_of_points, data_size, position, 1, 'num_points')) {
+            if(DecodeValue(buffer, number_of_points, data_size, position, number_of_points.num_points.BYTES_PER_ELEMENT, 'num_points')) {
                 console.log("Error: Error while decoding num_points value");
                 return false;
             }
@@ -85,13 +86,13 @@ function DecoderBuffer(buffer, data_size) {
                         var temp_val =  {
                             val : new Uint8Array(1)
                         }
-                        if(!DecodeValue(this.buffer, temp_val, data_size, position, 1, 'val')) {
+                        if(!DecodeValue(this.buffer, temp_val, data_size, position, temp_val.val.BYTES_PER_ELEMENT, 'val')) {
                             console.log("Error: Error while decoding sequential indices");
                             return false;
                         }
                         face[j] = new Uint32Array(temp_val.val);
                     }
-                    Mesh.mesh[i] = face;
+                    this.mesh.push(face);
                 }
             } else if (number_of_points.num_points < (1 << 16)) {
                 // Decode indices as Uint16Array
@@ -108,7 +109,7 @@ function DecoderBuffer(buffer, data_size) {
                         }
                         face[j] = new Uint32Array(temp_val.val);
                     }
-                    Mesh.mesh[i] = face;
+                    this.mesh.push(face);
                 }
             } else if(number_of_points.num_points < (1 << 21) && this.bitstream_version[0] >= DracoBitstreamVersion(2,2)) {
                 // Decode indices as Uint32Array
@@ -118,13 +119,13 @@ function DecoderBuffer(buffer, data_size) {
                         var temp_val = {
                             val : new Uint32Array(1)
                         }
-                        if(!DecodeValue(this.buffer, temp_val, data_size, position, 1, 'val')) {
+                        if(!DecodeValue(this.buffer, temp_val, data_size, position, temp_val.val.BYTES_PER_ELEMENT, 'val')) {
                             console.log("Error: Error while decoding sequential indices");
                             return false;
                         }
                         face[j] = temp_val.val;
                     }
-                    Mesh.mesh[i] = face;
+                    this.mesh.push(face);
                 }
             } else {
                 // Decode mesh as Uint32Array (Default)
@@ -134,17 +135,16 @@ function DecoderBuffer(buffer, data_size) {
                         var temp_val = {
                             val : new Uint32Array(1)
                         }
-                        if(!DecodeValue(this.buffer, temp_val, data_size, position, 1, 'val')) {
+                        if(!DecodeValue(this.buffer, temp_val, data_size, position, temp_val.val.BYTES_PER_ELEMENT, 'val')) {
                             console.log("Error: Error while decoding sequential indices");
                             return false;
                         }
                         face[j] = temp_val.val;
                     }
-                    Mesh.mesh[i] = face;
+                    this.mesh.push(face);
                 }
             }
         }
-
         return true;
     }
 
@@ -152,15 +152,36 @@ function DecoderBuffer(buffer, data_size) {
         // Get decoded indices differences that were encoded with an entropy code.
         // Indices buffer
         var ind_buffer = {
-            indices_buffer : new Array(number_of_faces.num_faces * 3)
-        }
-        // TODO: Try and remove this initialization if possible
-        for(let i = 0 ; i < ind_buffer.indices_buffer.length; i++) {
-            ind_buffer.indices_buffer[i] = new Uint32Array(1);
+            indices_buffer : new Uint32Array(number_of_faces.num_faces * 3)
         }
     
-        // TODO rest of the decoding and decompressing
-
+        // RAns decoding part
+        if(!DecodeSymbols(number_of_faces.num_faces * 3, 1, buffer, ind_buffer, 'indices_buffer', position, data_size, this.bitstream_version)) {
+            console.log("Error: While decoding sequential continuity data in decoding symbols");
+            return false;
+        }
+        
+        // Rest of the decoding and decompressing
+        last_index_value = new Uint32Array(0);
+        last_index_value[0] = 0;
+        var vertex_index = 0;
+        for(let i = 0 ; i < number_of_faces.num_faces; ++i) {
+            face = new Uint32Array(3);
+            for(let j = 0 ; j < 3 ; ++j) {
+                encoded_val = new Uint32Array(1);
+                encoded_val[0] = ind_buffer.indices_buffer[vertex_index++];
+                index_diff = new Uint32Array(1);
+                index_diff[0] = (encoded_val[0] >> 1);
+                if(encoded_val[0] & 1) {
+                    index_diff[0] = -index_diff[0];
+                }
+                index_value = new Uint32Array(1);
+                index_value[0] = index_diff[0] + last_index_value[0];
+                face[j] = index_value[0];
+                last_index_value[0] = index_value[0];
+            }
+            this.mesh.push(face);
+        }
         return true;
     }
 
@@ -186,7 +207,7 @@ function DecoderBuffer(buffer, data_size) {
         return true;
     } 
 
-}
+} // DecodeBuffer End
 
 function Decoder(input_file) {
     this.input_file_location = input_file;
@@ -285,15 +306,6 @@ function Decoder(input_file) {
         
 
         return true;
-    }
-
-    // Usage
-    this.PrintUsage = function() {
-        console.log("Usage: node draco_decoder.js [options] \n");
-        console.log("Main Options: Include absolute path for files along with extensions");
-        console.log("  -i <input>   Input draco encoded file.");
-        console.log("  -o <output>   Output file name.");
-        console.log("\nSupported output formats: '.ply', '.obj'");
     }
 
     // Debugging functions
