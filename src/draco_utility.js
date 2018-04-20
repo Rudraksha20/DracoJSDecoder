@@ -2,9 +2,195 @@
 require("google-closure-library")
 goog.require("goog.math.Long");
 
-function Decoderbuffer(buffer, position, data_size) {
-    
+// Internal helper class to decode bits from a bit buffer.
+function BitDecoder() {
+    this.bit_buffer_ = new Uint8Array(1);
+    this.bit_buffer_end_ = new Uint8Array(1);
+    this.bit_offset_ = new goog.Math.Long(0,0); // Representing the 64 bit number as 2 32 bit number.
+
+    // Starts decoding a bit sequence.
+    // decode_size must be true if the size of the encoded bit data was included,
+    // during encoding. The size is then returned to out_size.
+    // Returns false on error.
+    this.StartBitDecoding = function(decode_size, buffer) {
+
+    }
 }
+
+function DecoderBuffer(buffer, position, data_size) {
+    this.buffer = buffer;
+    this.position = position;
+    this.data_size = data_size;
+    this.bitstream_version = new Uint16Array(1);
+    this.bit_mode_ = false;
+    this.bit_decoder_ = new BitDecoder();
+
+    this.getBitstreamVersion = function() {
+        return this.bitstream_version[0];
+    }
+
+    this.getDataSize = function() {
+        return this.data_size;
+    }
+
+    this.setBitstreamVersion = function(bsv) {
+        return this.bitstream_version[0] = bsv;
+    }
+
+    this.getBitMode = function() {
+        return this.bit_mode_;
+    }
+
+    this.setBitMode = function(bm) {
+        this.bit_mode_ = bm;
+    }
+
+    this.getPosition = function() {
+        return this.position;
+    }
+    
+    this.setPosition = function(pos) {
+        this.position = pos;
+    }
+
+    this.DecodeValue = function(out_value, size, attribute_name) {
+        if(this.data_size < this.position + size) {
+            return false;
+        }
+    
+        let temp = new Uint8Array(size);
+    
+        for(let i = this.position, j = (size -1); i < this.position + size; i++, j--) {
+            temp[j] = this.buffer.slice(i, i+1)[0];
+        }
+    
+        for(let k = 0; k < size; k++) {
+            out_value[attribute_name][0] <<= (8*k);
+            out_value[attribute_name][0] |= temp[k];
+        }
+        
+        this.position += size;
+        return true;
+    }
+
+    // Decodes a specified integer as varint. Note that the in type must be the
+    // same as the one used in the corresponding EncodeVarint() call.
+    this.DecodeVarint = function(out_value, attribute_name, unsigned) {
+        if(unsigned) {  
+            // Coding of unsigned values.
+            // 0-6 bit - data
+            // 7 bit - next byte?
+
+            var in_value = {
+                in_val : new Uint8Array(1)
+            };
+
+            if(!this.DecodeValue(in_value, in_value.in_val.BYTES_PER_ELEMENT, 'in_val')) {
+                return false;
+            }
+
+            if(in_value.in_val & (1 << 7)) {
+                // Next byte is available, decode it first
+                if(!this.DecodeVarint(out_value, attribute_name, unsigned)) {
+                    return false;
+                }
+                // Append decoded info from this byte.
+                out_value[attribute_name] <<= 7;
+                out_value[attribute_name] |= in_value.in_val & ((1 << 7) - 1);
+            } else {
+                // Last byte reached
+                out_value[attribute_name] = in_value.in_val;
+            }
+
+        } else {
+            // Input is a signed value. Decode the symbol and convert to signed.
+            // Temp convert signed to unsigned value
+            var temp_out_val = {
+                val
+            }
+            if(out_value[attribute_name].BYTES_PER_ELEMENT == 1) {
+                temp_out_val.val = new Uint8Array(1);
+            } else if(out_value[attribute_name].BYTES_PER_ELEMENT == 2) {
+                temp_out_val.val = new Uint16Array(1);
+            } else if(out_value[attribute_name].BYTES_PER_ELEMENT == 4) {
+                temp_out_val.val = new Uint32Array(1);
+            }
+
+            if(!this.DecodeVarint(temp_out_val, 'val', true)) {
+                return false;
+            }
+
+            if(out_value[attribute_name].BYTES_PER_ELEMENT == 1) {
+                out_value[attribute_name] = new Int8Array(temp_out_val.val);
+            } else if(out_value[attribute_name].BYTES_PER_ELEMENT == 2) {
+                out_value[attribute_name] = new Int16Array(temp_out_val.val);
+            } else if(out_value[attribute_name].BYTES_PER_ELEMENT == 4) {
+                out_value[attribute_name] = new Int32Array(temp_out_val.val);
+            }
+
+        }
+        return true;
+    }
+
+
+    // Decodes a specified 64 BIT integer as varint. Note that the in type must be the
+    // same as the one used in the corresponding EncodeVarint() call.
+    this.DecodeVarint64Bit = function(out_value, attribute_name, unsigned) {
+        // 64 bit number reperesented as two 32 bit numbers
+        // Number stored as -> [HIGH (32 bits), LOW (32 bits)]. Takes in value as goog.math.Long(LOW, HIGH)
+        if(unsigned) {  
+            // Coding of unsigned values.
+            // 0-6 bit - data
+            // 7 bit - next byte?
+
+            var in_value = {
+                in_val : new Uint8Array(1)
+            };
+
+            if(!this.DecodeValue(in_value, in_value.in_val.BYTES_PER_ELEMENT, 'in_val')) {
+                return false;
+            }
+
+            if(in_value.in_val & (1 << 7)) {
+                // Next byte is available, decode it first
+                if(!this.DecodeVarint(out_value, attribute_name, unsigned)) {
+                    return false;
+                }
+                // Append decoded info from this byte.
+                out_value[attribute_name].shiftLeft(7);
+                out_value[attribute_name].or(new goog.math.Long(in_value.in_val & ((1 << 7) - 1)), 0);
+            } else {
+                // Last byte reached
+                out_value[attribute_name] = new goog.math.Long(in_value.in_val, 0);
+            }
+
+        } else {
+            // This might not be needed... Not sure?
+        }
+        return true;
+    }  
+
+    this.DecodeValue64Bit = function(out_value, size, attribute_name) {
+        if(data_size < this.position + size) {
+            return false;
+        }
+
+        let temp = new Uint8Array(size);
+
+        for(let i = this.position, j = (size -1); i < this.position + size; i++, j--) {
+            temp[j] = buffer.slice(i, i+1)[0];
+        }
+
+        for(let k = 0; k < size; k++) {
+            out_value[attribute_name].shiftLeft(8*k);
+            out_value[attribute_name].or(temp[k]);
+        }
+        
+        this.position += size;
+        return true;
+    }
+
+} // DecodeBuffer End
 
 var Header = {
     draco_string : new Int8Array(5),
@@ -41,10 +227,11 @@ if(Object.freeze) {
     Object.freeze(EncodedGeometryType);
 }
 
+// Degraded remove after testing...
 // Global variable for iterating over the buffer
-var position = {
-    pos : 0
-};
+// var position = {
+//     pos : 0
+// };
 
 // Latest Draco bistream version
 var kDracoBitstreamVersionMajor = new Uint8Array(1);
@@ -141,26 +328,6 @@ function DecodeHeaderDRACOString(buffer, Header, data_size, position, size) {
     return true;
 }
 
-function DecodeValue(buffer, out_value, data_size, position, size, attribute_name) {
-    if(data_size < position.pos + size) {
-        return false;
-    }
-
-    let temp = new Uint8Array(size);
-
-    for(let i = position.pos, j = (size -1); i < position.pos + size; i++, j--) {
-        temp[j] = buffer.slice(i, i+1)[0];
-    }
-
-    for(let k = 0; k < size; k++) {
-        out_value[attribute_name][0] <<= (8*k);
-        out_value[attribute_name][0] |= temp[k];
-    }
-    
-    position.pos += size;
-    return true;
-}
-
 // Check if the input encoder type is valid
 function CheckEncoderType(input_encoder_type) {
     if(input_encoder_type == EncodedGeometryType.POINT_CLOUD) {
@@ -177,134 +344,12 @@ function DracoBitstreamVersion(v1, v2) {
     return ((v1 << 8) | v2);
 }
 
-// Remove after testing
-function BufferDecode(in_value, position) {
-    return true;
-}
+// // Remove after testing
+// function BufferDecode(in_value, position) {
+//     return true;
+// }
 
-// Decodes a specified integer as varint. Note that the in type must be the
-// same as the one used in the corresponding EncodeVarint() call.
-function DecodeVarint(position, out_value, buffer, data_size, attribute_name, unsigned) {
-    if(unsigned) {  
-        // Coding of unsigned values.
-        // 0-6 bit - data
-        // 7 bit - next byte?
 
-        var in_value = {
-            in_val : new Uint8Array(1)
-        };
-
-        if(!DecodeValue(buffer, in_value, data_size, position, in_value.in_val.BYTES_PER_ELEMENT, 'in_val')) {
-            return false;
-        }
-
-        if(in_value.in_val & (1 << 7)) {
-            // Next byte is available, decode it first
-            if(!DecodeVarint(position, out_value, buffer, data_size, attribute_name, unsigned)) {
-                return false;
-            }
-            // Append decoded info from this byte.
-            out_value[attribute_name] <<= 7;
-            out_value[attribute_name] |= in_value.in_val & ((1 << 7) - 1);
-        } else {
-            // Last byte reached
-            out_value[attribute_name] = in_value.in_val;
-        }
-
-    } else {
-        // Input is a signed value. Decode the symbol and convert to signed.
-        // Temp convert signed to unsigned value
-        var temp_out_val = {
-            val
-        }
-        if(out_value[attribute_name].BYTES_PER_ELEMENT == 1) {
-            temp_out_val.val = new Uint8Array(1);
-        } else if(out_value[attribute_name].BYTES_PER_ELEMENT == 2) {
-            temp_out_val.val = new Uint16Array(1);
-        } else if(out_value[attribute_name].BYTES_PER_ELEMENT == 4) {
-            temp_out_val.val = new Uint32Array(1);
-        }
-
-        if(!DecodeVarint(position, temp_out_val, buffer, data_size, 'val', true)) {
-            return false;
-        }
-
-        if(out_value[attribute_name].BYTES_PER_ELEMENT == 1) {
-            out_value[attribute_name] = new Int8Array(temp_out_val.val);
-        } else if(out_value[attribute_name].BYTES_PER_ELEMENT == 2) {
-            out_value[attribute_name] = new Int16Array(temp_out_val.val);
-        } else if(out_value[attribute_name].BYTES_PER_ELEMENT == 4) {
-            out_value[attribute_name] = new Int32Array(temp_out_val.val);
-        }
-
-    }
-    return true;
-}
-
-// Starts decoding a bit sequence.
-// decode_size must be true if the size of the encoded bit data was included,
-// during encoding. The size is then returned to out_size.
-// Returns false on error.
-function StartBitDecoding(decode_size, buffer, position, data_size, bitstream_version) {
-
-}
-
-// Decodes a specified 64 BIT integer as varint. Note that the in type must be the
-// same as the one used in the corresponding EncodeVarint() call.
-function DecodeVarint64Bit(position, out_value, buffer, data_size, attribute_name, unsigned) {
-    // 64 bit number reperesented as two 32 bit numbers
-    // Number stored as -> [HIGH (32 bits), LOW (32 bits)]. Takes in value as goog.math.Long(LOW, HIGH)
-    if(unsigned) {  
-        // Coding of unsigned values.
-        // 0-6 bit - data
-        // 7 bit - next byte?
-
-        var in_value = {
-            in_val : new Uint8Array(1)
-        };
-
-        if(!DecodeValue(buffer, in_value, data_size, position, in_value.in_val.BYTES_PER_ELEMENT, 'in_val')) {
-            return false;
-        }
-
-        if(in_value.in_val & (1 << 7)) {
-            // Next byte is available, decode it first
-            if(!DecodeVarint(position, out_value, buffer, data_size, attribute_name, unsigned)) {
-                return false;
-            }
-            // Append decoded info from this byte.
-            out_value[attribute_name].shiftLeft(7);
-            out_value[attribute_name].or(gog.math.Long(in_value.in_val & ((1 << 7) - 1)), 0);
-        } else {
-            // Last byte reached
-            out_value[attribute_name] = new goog.math.Long(in_value.in_val, 0);
-        }
-
-    } else {
-        // This might not be needed... Not sure?
-    }
-    return true;
-}  
-
-function DecodeValue64Bit(buffer, out_value, data_size, position, size, attribute_name) {
-    if(data_size < position.pos + size) {
-        return false;
-    }
-
-    let temp = new Uint8Array(size);
-
-    for(let i = position.pos, j = (size -1); i < position.pos + size; i++, j--) {
-        temp[j] = buffer.slice(i, i+1)[0];
-    }
-
-    for(let k = 0; k < size; k++) {
-        out_value[attribute_name].shiftLeft(8*k);
-        out_value[attribute_name].or(temp[k]);
-    }
-    
-    position.pos += size;
-    return true;
-}
 
 // Computes the desired precision of the rANS method for the specified number of
 // unique symbols the input data (defined by their bit_length).
@@ -734,7 +779,6 @@ function DecodeSymbols(num_values, num_components, buffer, out_buffer, out_attri
 module.exports = {
     Header                      : Header,
     DecodeHeaderDRACOString     : DecodeHeaderDRACOString,
-    DecodeValue                 : DecodeValue,
     EncodedGeometryType         : EncodedGeometryType,
     MeshEncoderMethod           : MeshEncoderMethod,
     CheckEncoderType            : CheckEncoderType,
@@ -742,7 +786,6 @@ module.exports = {
     kDracoBitstreamVersionMinor : kDracoBitstreamVersionMinor,
     DracoBitstreamVersion       : DracoBitstreamVersion,
     METADATA_FLAG_MASK          : METADATA_FLAG_MASK,
-    position                    : position,
-    DecodeVarint                : DecodeVarint,
-    DecodeSymbols               : DecodeSymbols     
+    DecodeSymbols               : DecodeSymbols,
+    DecoderBuffer               : DecoderBuffer     
 }

@@ -1,4 +1,3 @@
-var {DecodeValue} = require('./draco_utility.js');
 var {EncodedGeometryType} = require(`./draco_utility.js`);
 var {MeshEncoderMethod} = require(`./draco_utility.js`);
 var {CheckEncoderType} = require('./draco_utility.js');
@@ -6,15 +5,13 @@ var {kDracoBitstreamVersionMajor} = require('./draco_utility.js');
 var {kDracoBitstreamVersionMinor} = require('./draco_utility.js');
 var {DracoBitstreamVersion} = require('./draco_utility.js');
 var {METADATA_FLAG_MASK} = require('./draco_utility.js');
-var {position} = require('./draco_utility.js');
-var {DecodeVarint} = require('./draco_utility.js');
 var {Header} = require('./draco_utility.js');
 var {DecodeSymbols} = require('./draco_utility.js');
 var {DecodeHeaderDRACOString} = require('./draco_utility.js');
+var {DecoderBuffer} = require('./draco_utility.js');
 
 function DecoderBuffer(buffer, data_size) {
-    this.buffer = buffer;
-    this.data_size = data_size;
+    this.buffer = DecoderBuffer(buffer, 0, data_size);
     this.bitstream_version = new Uint16Array(1);
     this.num_faces;
     this.num_points;
