@@ -27,9 +27,13 @@ try {
 
 // This function is exported for any third party application to use for decoding
 function DracoJSDecoder(bufer_data, buffer_length) {
-    // Get the input and output file locations, file names and types    
-    // var draco_decoder = new Draco(process.argv[3], process.argv[5]);
-    var draco_decoder = new Draco(process.argv[3]);
+    var draco_decoder = new Draco();
+
+    if(buffer_length == 0) {
+        console.log("Input buffer is empty, there is nothing to decode!");
+        return true;
+    }
+
     draco_decoder.CreateDecodeBuffer(bufer_data, buffer_length);
 
     // Decode the header
@@ -44,7 +48,7 @@ function DracoJSDecoder(bufer_data, buffer_length) {
 }
 
 // Store the output in an object and return the object
-
+// TODO
 
 // Exporting the DracoJSDecoder function for anyone to use
 module.exports = DracoJSDecoder;

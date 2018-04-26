@@ -1,4 +1,4 @@
-// Support for 64bit using the Google Closure Librar
+// Support for 64bit using the Google Closure Library
 require("google-closure-library")
 goog.require("goog.math.Long");
 
@@ -6,7 +6,7 @@ goog.require("goog.math.Long");
 function BitDecoder() {
     this.bit_buffer_ = new Uint8Array(1);
     this.bit_buffer_end_ = new Uint8Array(1);
-    this.bit_offset_ = new goog.Math.Long(0,0); // Representing the 64 bit number as 2 32 bit number.
+    this.bit_offset_ = new goog.math.Long(0,0); // Representing the 64 bit number as 2 32 bit number.
 
     // Starts decoding a bit sequence.
     // decode_size must be true if the size of the encoded bit data was included,
@@ -34,7 +34,7 @@ function DecoderBuffer(buffer, position, data_size) {
     }
 
     this.setBitstreamVersion = function(bsv) {
-        return this.bitstream_version[0] = bsv;
+        return this.bitstream_version = bsv;
     }
 
     this.getBitMode = function() {
@@ -51,6 +51,10 @@ function DecoderBuffer(buffer, position, data_size) {
     
     this.setPosition = function(pos) {
         this.position = pos;
+    }
+
+    this.getBuffer = function() {
+        return this.buffer;
     }
 
     this.DecodeValue = function(out_value, size, attribute_name) {
@@ -190,6 +194,20 @@ function DecoderBuffer(buffer, position, data_size) {
         return true;
     }
 
+    this.DecodeHeaderDRACOString = function(Header, size) {
+        if(data_size < this.position + size) {
+            return false;
+        }
+    
+        var result = "";
+        for(let i = this.position; i < this.position + size; i++) {
+            result += String.fromCharCode(buffer.slice(i,i+1)[0]);
+        }
+        Header.draco_string = result;
+        this.position += size;
+        return true;
+    }
+
 } // DecodeBuffer End
 
 var Header = {
@@ -314,20 +332,6 @@ function rans_dec_sym() {
     }
 };
 
-function DecodeHeaderDRACOString(buffer, Header, data_size, position, size) {
-    if(data_size < position.pos + size) {
-        return false;
-    }
-
-    var result = "";
-    for(let i = position.pos; i < position.pos + size; i++) {
-        result += String.fromCharCode(buffer.slice(i,i+1)[0]);
-    }
-    Header.draco_string = result;
-    position.pos += size;
-    return true;
-}
-
 // Check if the input encoder type is valid
 function CheckEncoderType(input_encoder_type) {
     if(input_encoder_type == EncodedGeometryType.POINT_CLOUD) {
@@ -377,25 +381,25 @@ function RAnsDecoder(rans_precision_bits_t) {
 
     this.mem_get_le16 = function(buffer, buf_offset) {
         var val = new Uint32Array(1);
-        val[0] = buffer.slice(buf_offset + 1, buf_offset + 2)[0] << 8;
-        val[0] |= buffer.slice(buf_offset,  buf_offset + 1)[0]; 
+        val[0] = buffer.getBuffer().slice(buf_offset + 1, buf_offset + 2)[0] << 8;
+        val[0] |= buffer.getBuffer().slice(buf_offset,  buf_offset + 1)[0]; 
         return val[0];
     }
 
     this.mem_get_le24 = function(buffer, buf_offset) {
         var val = new Uint32Array(1);
-        val[0] = buffer.slice(buf_offset + 2, buf_offset + 3)[0] << 16;
-        val[0] |= buffer.slice(buf_offset + 1, buf_offset + 2)[0] << 8;
-        val[0] |= buffer.slice(buf_offset, buf_offset + 1)[0];
+        val[0] = buffer.getBuffer().slice(buf_offset + 2, buf_offset + 3)[0] << 16;
+        val[0] |= buffer.getBuffer().slice(buf_offset + 1, buf_offset + 2)[0] << 8;
+        val[0] |= buffer.getBuffer().slice(buf_offset, buf_offset + 1)[0];
         return val[0];
     }
 
     this.mem_get_le32 = function(buffer, buf_offset) {
         var val = new Uint32Array(1);
-        val[0] = buffer.slice(buf_offset + 3, buf_offset + 4)[0] << 24;
-        val[0] |= buffer.slice(buf_offset + 2, buf_offset + 3)[0] << 16;
-        val[0] |= buffer.slice(buf_offset + 1, buf_offset + 2)[0] << 8;
-        val[0] |= buffer.slice(buf_offset, buf_offset + 1)[0];
+        val[0] = buffer.getBuffer().slice(buf_offset + 3, buf_offset + 4)[0] << 24;
+        val[0] |= buffer.getBuffer().slice(buf_offset + 2, buf_offset + 3)[0] << 16;
+        val[0] |= buffer.getBuffer().slice(buf_offset + 1, buf_offset + 2)[0] << 8;
+        val[0] |= buffer.getBuffer().slice(buf_offset, buf_offset + 1)[0];
         return val[0];
     }
 
@@ -407,7 +411,7 @@ function RAnsDecoder(rans_precision_bits_t) {
         sym_.sym.setCumProb(this.probability_table_[symbol].getCumProb());
     }
 
-    this.rans_build_look_up_table = function(prob_table, num_symb, buffer, position, data_size) {
+    this.rans_build_look_up_table = function(prob_table, num_symb, buffer) {
         this.lut_table_ = new Uint32Array(this.rans_precision);
         let cum_prob = new Uint32Array(1);
         cum_prob[0] = 0;
@@ -438,7 +442,7 @@ function RAnsDecoder(rans_precision_bits_t) {
             return 1;
         }
         this.ans_.setBuf(buf);
-        x = buffer.slice(buf + offset - 2, buf + offset - 1)[0] >> 6;
+        x = buffer.getBuffer().slice(buf + offset - 2, buf + offset - 1)[0] >> 6;
         if(x == 0) {
             this.ans_.setBufOffset(offset - 1);
             this.ans_.setState(buffer.slice(buf + offset - 2, buf + offset - 1)[0] & 0x3F);
@@ -478,7 +482,7 @@ function RAnsDecoder(rans_precision_bits_t) {
         }
         while(this.ans_.getState() < this.l_rans_base && this.ans_.getbufOffset() > 0) {
             this.ans_.setBufOffset(this.ans_.getbufOffset() - 1);
-            var buf_val = buffer.slice(this.ans_.getBuf() + this.ans_.getbufOffset(), this.ans_.getBuf() + this.ans_.getbufOffset() + 1)[0];
+            var buf_val = buffer.getBuffer().slice(this.ans_.getBuf() + this.ans_.getbufOffset(), this.ans_.getBuf() + this.ans_.getbufOffset() + 1)[0];
             this.ans_.setState(this.ans_.getState() * io_base + buf_val);
         }
 
@@ -491,8 +495,7 @@ function RAnsDecoder(rans_precision_bits_t) {
     }
 
     this.read_end = function() {
-        this.ans_.setState(this.l_rans_base); 
-        return this.ans_.getState();
+        return (this.ans_.getState() == this.l_rans_base);
     }
 
 } // RAnsDecoder Ends
@@ -515,19 +518,19 @@ function RAnsSymbolDecoder(unique_symbols_bit_length_t) {
         return this.num_symb.num_symbols_[0];
     }
     
-    this.Create = function(buffer, data_size, position, bitstream_version) {
+    this.Create = function(buffer) {
         // Check if the Decodebuffer version is set
-        if(bitstream_version == 0) {
+        if(buffer.getBitstreamVersion() == 0) {
             return false;
         }
 
         // Decode the number of alphabet symbols
         // Check for backwards compatibility
-        if(bitstream_version < DracoBitstreamVersion(2, 0)) {
-            if(!DecodeValue(buffer, num_symb, data_size, position, num_symb.num_symbols_.BYTES_PER_ELEMENT, 'num_symbols_')) {
+        if(buffer.getBitstreamVersion() < DracoBitstreamVersion(2, 0)) {
+            if(!buffer.DecodeValue(num_symb, num_symb.num_symbols_.BYTES_PER_ELEMENT, 'num_symbols_')) {
                 return false;
             }
-        } else if (!DecodeVarint(position, this.num_symb, buffer, data_size, 'num_symbols_', true)) {
+        } else if (!buffer.DecodeVarint(this.num_symb, 'num_symbols_', true)) {
             return false;
         }
         
@@ -546,7 +549,7 @@ function RAnsSymbolDecoder(unique_symbols_bit_length_t) {
             
             // Decode the first byte and extract the number of extra bytes we need to
             // get, or the offset to the next symbol with non-zero probability.
-            if(!DecodeValue(buffer, prob_data, data_size, position, prob_data.prob_data_.BYTES_PER_ELEMENT, 'prob_data_')) {
+            if(!buffer.DecodeValue(prob_data, prob_data.prob_data_.BYTES_PER_ELEMENT, 'prob_data_')) {
                 return false;
             }
 
@@ -572,7 +575,7 @@ function RAnsSymbolDecoder(unique_symbols_bit_length_t) {
                     var eb = {
                         eb_ : new Uint8Array(1)
                     }
-                    if(!DecodeValue(buffer, eb, data_size, position, eb.eb_.BYTES_PER_ELEMENT, 'eb_')) {
+                    if(!buffer.DecodeValue(eb, eb.eb_.BYTES_PER_ELEMENT, 'eb_')) {
                         return false;
                     }
                     // Shift 8 bits for each extra byte and subtract 2 for the two first
@@ -584,13 +587,13 @@ function RAnsSymbolDecoder(unique_symbols_bit_length_t) {
                 this.prob_table.probability_table_[i] = prob[0];
             }
         }
-        if(!this.ans_.rans_build_look_up_table(this.prob_table, this.num_symb, buffer, position, data_size)) {
+        if(!this.ans_.rans_build_look_up_table(this.prob_table, this.num_symb, buffer)) {
             return false;
         }
         return true;
     }
 
-    this.StartDecoding = function(buffer, data_size, position, bitstream_version) {
+    this.StartDecoding = function(buffer) {
         // Supporting 64 bit numbers using the google closure library
         // 64 bit number reperesented as two 32 bit numbers
         // Number stored as -> [HIGH (32 bits) | LOW (32 bits)]. Takes in value as goog.math.Long(LOW, HIGH)
@@ -599,25 +602,27 @@ function RAnsSymbolDecoder(unique_symbols_bit_length_t) {
         }
 
         // Draco backwards compatibilityDracoBitstreamVersion
-        if(bitstream_version < DracoBitstreamVersion(2, 0)) {
-            if(!DecodeValue64Bit(buffer, bytes_enc, data_size, position, 8, 'bytes_encoded')) {
+        if(buffer.getBitstreamVersion() < DracoBitstreamVersion(2, 0)) {
+            if(!buffer.DecodeValue64Bit(bytes_enc, 8, 'bytes_encoded')) {
                 return false;
             }
         } else {
-            if(!DecodeVarint64Bit(position, bytes_enc, buffer, data_size, 'bytes_encoded', true)) {
+            if(!buffer.DecodeVarint64Bit(bytes_enc, 'bytes_encoded', true)) {
                 return false;
             }
         }
-
-        if(bytes_enc.bytes_encoded.greaterThan(new goog.math.Long(data_size - position.pos), 0)) {
+        
+        if(bytes_enc.bytes_encoded.greaterThan(new goog.math.Long(buffer.getDataSize() - buffer.getPosition(), 0))) {
             return false;
         }
 
-        var currentPosValue = position.pos;
+        var currentPosValue = buffer.getPosition();
         // Advance the buffer past the rANS data.
         // .toInt() it returns the LOW 32 bit value. This is due to the lack of support for 64 bit numbers by JS.
         // Remember to update this as support for 64 BIT numbers rolls out for JS.
-        position.pos += bytes_enc.bytes_encoded.toInt();
+        var tempPos = buffer.getPosition();
+        tempPos += bytes_enc.bytes_encoded.toInt();
+        buffer.setPosition(tempPos);
 
         if(this.ans_.read_init(buffer, currentPosValue, bytes_enc.bytes_encoded.toInt()) != 0) {
             return false;
@@ -636,13 +641,13 @@ function RAnsSymbolDecoder(unique_symbols_bit_length_t) {
 
 }// RAnsSymbolDecoder Ends
 
-function DecodeTaggedSymbols(num_values, num_components, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version) {
+function DecodeTaggedSymbols(num_values, num_components, buffer, out_buffer, out_attribute_name) {
     this.tag_decoder = new RAnsSymbolDecoder(5);
-    if(!tag_decoder.Create(buffer, data_size, position, bitstream_version)) {
+    if(!tag_decoder.Create(buffer)) {
         return false;
     }
 
-    if(!tag_decoder.StartDecoding(buffer, data_size, position, bitstream_version)) {
+    if(!tag_decoder.StartDecoding(buffer)) {
         return false;
     }
 
@@ -653,15 +658,16 @@ function DecodeTaggedSymbols(num_values, num_components, buffer, out_buffer, out
 
     // src_buffer now points behind the encoded tag data (to the place where the
     // values are encoded).
-    StartBitDecoding(buffer, position, data_size, bitstream_version)
+    // TODO
+    //StartBitDecoding(buffer)
 
     return true;
 }
 
-function DecodeRawSymbolsInternal(init_val, num_values, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version) {
+function DecodeRawSymbolsInternal(init_val, num_values, buffer, out_buffer, out_attribute_name) {
     var decoder = new RAnsSymbolDecoder(init_val);
 
-    if(!decoder.Create(buffer, data_size, position, bitstream_version)) {
+    if(!decoder.Create(buffer)) {
         return false;
     }
 
@@ -669,7 +675,7 @@ function DecodeRawSymbolsInternal(init_val, num_values, buffer, out_buffer, out_
         return false;
     }    
 
-    if(!decoder.StartDecoding(buffer, data_size, position, bitstream_version)) {
+    if(!decoder.StartDecoding(buffer)) {
         return false;
     }
 
@@ -685,70 +691,70 @@ function DecodeRawSymbolsInternal(init_val, num_values, buffer, out_buffer, out_
     return true;
 }
 
-function DecodeRawSymbols(num_values, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version) {
+function DecodeRawSymbols(num_values, buffer, out_buffer, out_attribute_name) {
     this.tag_decoder;
     var max_bit_len = {
         max_bit_length : new Uint8Array(1)
     }
 
-    if(!DecodeValue(buffer, max_bit_len, data_size, position, max_bit_len.max_bit_length.BYTES_PER_ELEMENT, 'max_bit_length')) {
+    if(!buffer.DecodeValue(max_bit_len, max_bit_len.max_bit_length.BYTES_PER_ELEMENT, 'max_bit_length')) {
         return false;    
     }
 
     switch (max_bit_len.max_bit_length[0]) {
         case 1:
-            return DecodeRawSymbolsInternal(1 ,num_values, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version);
+            return DecodeRawSymbolsInternal(1 ,num_values, buffer, out_buffer, out_attribute_name);
             break;
         case 2:
-            return DecodeRawSymbolsInternal(2 ,num_values, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version);
+            return DecodeRawSymbolsInternal(2 ,num_values, buffer, out_buffer, out_attribute_name);
             break;
         case 3:
-            return DecodeRawSymbolsInternal(3 ,num_values, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version);
+            return DecodeRawSymbolsInternal(3 ,num_values, buffer, out_buffer, out_attribute_name);
             break;
         case 4:
-            return DecodeRawSymbolsInternal(4 ,num_values, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version);
+            return DecodeRawSymbolsInternal(4 ,num_values, buffer, out_buffer, out_attribute_name);
             break;
         case 5:
-            return DecodeRawSymbolsInternal(5 ,num_values, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version);
+            return DecodeRawSymbolsInternal(5 ,num_values, buffer, out_buffer, out_attribute_name);
             break;
         case 6:
-            return DecodeRawSymbolsInternal(6 ,num_values, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version);
+            return DecodeRawSymbolsInternal(6 ,num_values, buffer, out_buffer, out_attribute_name);
             break;
         case 7:
-            return DecodeRawSymbolsInternal(7 ,num_values, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version);
+            return DecodeRawSymbolsInternal(7 ,num_values, buffer, out_buffer, out_attribute_name);
             break;
         case 8:
-            return DecodeRawSymbolsInternal(8 ,num_values, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version);
+            return DecodeRawSymbolsInternal(8 ,num_values, buffer, out_buffer, out_attribute_name);
             break;        
         case 9:
-            return DecodeRawSymbolsInternal(9 ,num_values, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version);
+            return DecodeRawSymbolsInternal(9 ,num_values, buffer, out_buffer, out_attribute_name);
             break;
         case 10:
-            return DecodeRawSymbolsInternal(10 ,num_values, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version);
+            return DecodeRawSymbolsInternal(10 ,num_values, buffer, out_buffer, out_attribute_name);
             break;
         case 11:
-            return DecodeRawSymbolsInternal(11 ,num_values, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version);
+            return DecodeRawSymbolsInternal(11 ,num_values, buffer, out_buffer, out_attribute_name);
             break;
         case 12:
-            return DecodeRawSymbolsInternal(12 ,num_values, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version);
+            return DecodeRawSymbolsInternal(12 ,num_values, buffer, out_buffer, out_attribute_name);
             break;
         case 13:
-            return DecodeRawSymbolsInternal(13 ,num_values, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version);
+            return DecodeRawSymbolsInternal(13 ,num_values, buffer, out_buffer, out_attribute_name);
             break;
         case 14:
-            return DecodeRawSymbolsInternal(14 ,num_values, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version);
+            return DecodeRawSymbolsInternal(14 ,num_values, buffer, out_buffer, out_attribute_name);
             break;
         case 15:
-            return DecodeRawSymbolsInternal(15 ,num_values, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version);
+            return DecodeRawSymbolsInternal(15 ,num_values, buffer, out_buffer, out_attribute_name);
             break;
         case 16:
-            return DecodeRawSymbolsInternal(16 ,num_values, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version);
+            return DecodeRawSymbolsInternal(16 ,num_values, buffer, out_buffer, out_attribute_name);
             break;
         case 17:
-            return DecodeRawSymbolsInternal(17 ,num_values, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version);
+            return DecodeRawSymbolsInternal(17 ,num_values, buffer, out_buffer, out_attribute_name);
             break;
         case 18:
-            return DecodeRawSymbolsInternal(18 ,num_values, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version);
+            return DecodeRawSymbolsInternal(18 ,num_values, buffer, out_buffer, out_attribute_name);
             break;
         default:
             return false;
@@ -756,7 +762,7 @@ function DecodeRawSymbols(num_values, buffer, out_buffer, out_attribute_name, da
 }
 
 // Rans decoder part
-function DecodeSymbols(num_values, num_components, buffer, out_buffer, out_attribute_name, position, data_size, bitstream_version) {
+function DecodeSymbols(num_values, num_components, buffer, out_buffer, out_attribute_name) {
     if(num_values == 0) {
         return true;
     }
@@ -764,21 +770,20 @@ function DecodeSymbols(num_values, num_components, buffer, out_buffer, out_attri
     var Scheme = {
         scheme : new Uint8Array(1)
     } 
-    if(!DecodeValue(buffer, Scheme, data_size, position, Scheme.scheme.BYTES_PER_ELEMENT, 'scheme')) {
+    if(!buffer.DecodeValue(Scheme, Scheme.scheme.BYTES_PER_ELEMENT, 'scheme')) {
         return false;
     }
 
     if(Scheme.scheme == SymbolCodingMethod.SYMBOL_CODING_TAGGED) {
-        return DecodeTaggedSymbols(num_values, num_components, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version);
+        return DecodeTaggedSymbols(num_values, num_components, buffer, out_buffer, out_attribute_name);
     } else if(Scheme.scheme == SymbolCodingMethod.SYMBOL_CODING_RAW) {
-        return DecodeRawSymbols(num_values, buffer, out_buffer, out_attribute_name, data_size, position, bitstream_version);
+        return DecodeRawSymbols(num_values, buffer, out_buffer, out_attribute_name);
     }
     return false;
 }
 
 module.exports = {
     Header                      : Header,
-    DecodeHeaderDRACOString     : DecodeHeaderDRACOString,
     EncodedGeometryType         : EncodedGeometryType,
     MeshEncoderMethod           : MeshEncoderMethod,
     CheckEncoderType            : CheckEncoderType,

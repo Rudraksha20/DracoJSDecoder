@@ -7,18 +7,16 @@ var {DracoBitstreamVersion} = require('./draco_utility.js');
 var {METADATA_FLAG_MASK} = require('./draco_utility.js');
 var {Header} = require('./draco_utility.js');
 var {DecodeSymbols} = require('./draco_utility.js');
-var {DecodeHeaderDRACOString} = require('./draco_utility.js');
 var {DecoderBuffer} = require('./draco_utility.js');
 
-function DecoderBuffer(buffer, data_size) {
-    this.buffer = DecoderBuffer(buffer, 0, data_size);
-    this.bitstream_version = new Uint16Array(1);
+function Decoder(buffer, data_size) {
+    this.buffer = new DecoderBuffer(buffer, 0, data_size);
     this.num_faces;
     this.num_points;
     this.mesh = new Array();
 
     this.SetBitstreamVersion = function(version_major, version_minor) {
-        this.bitstream_version[0] = DracoBitstreamVersion(version_major, version_minor);
+        this.buffer.setBitstreamVersion(DracoBitstreamVersion(version_major, version_minor));
     }
 
     this.DecodeSequentialConnectivityData = function() {
@@ -31,28 +29,28 @@ function DecoderBuffer(buffer, data_size) {
         };
 
         // Backwards compatibility
-        if(this.bitstream_version < DracoBitstreamVersion(2, 2)) {
-            if(DecodeValue(buffer, number_of_faces, data_size, position, number_of_faces.num_faces.BYTES_PER_ELEMENT, 'num_faces')) {
+        if(this.buffer.getBitstreamVersion() < DracoBitstreamVersion(2, 2)) {
+            if(this.buffer.DecodeValue(number_of_faces, number_of_faces.num_faces.BYTES_PER_ELEMENT, 'num_faces')) {
                 console.log("Error: Error while decoding the num_faces value");
                 return false;
             }
-            if(DecodeValue(buffer, number_of_points, data_size, position, number_of_points.num_points.BYTES_PER_ELEMENT, 'num_points')) {
+            if(this.buffer.DecodeValue(number_of_points, number_of_points.num_points.BYTES_PER_ELEMENT, 'num_points')) {
                 console.log("Error: Error while decoding num_points value");
                 return false;
             }
         }
 
-        if(!DecodeVarint(position, number_of_faces, this.buffer, data_size, 'num_faces', true)) {
+        if(!this.buffer.DecodeVarint(number_of_faces, 'num_faces', true)) {
             console.log("Error: Error while decoding the num_faces value");
             return false;
         }
-        if(!DecodeVarint(position, number_of_points, this.buffer, data_size, 'num_points', true)) {
+        if(!this.buffer.DecodeVarint(number_of_points, 'num_points', true)) {
             console.log("Error: Error while decoding num_points value");
             return false;
         }
 
         // TODO: Check that num_faces and num_points are valid values
-        // This needs a support for 64 bit numbers in JS.
+        // Support for 64 Bit numbers is added.. needs implementation
 
         // Store the number of faces and number of points value
         this.num_faces = number_of_faces.num_faces;
@@ -63,7 +61,7 @@ function DecoderBuffer(buffer, data_size) {
             connectivity_method : new Uint8Array(1)
         }
         
-        if(!DecodeValue(buffer, connect_method, data_size, position, connect_method.connectivity_method.BYTES_PER_ELEMENT, 'connectivity_method')) {
+        if(!this.buffer.DecodeValue(connect_method, connect_method.connectivity_method.BYTES_PER_ELEMENT, 'connectivity_method')) {
             console.log("Error: Error while decoding connectivity method");
             return false;
         }
@@ -83,7 +81,7 @@ function DecoderBuffer(buffer, data_size) {
                         var temp_val =  {
                             val : new Uint8Array(1)
                         }
-                        if(!DecodeValue(this.buffer, temp_val, data_size, position, temp_val.val.BYTES_PER_ELEMENT, 'val')) {
+                        if(!this.buffer.DecodeValue(temp_val, temp_val.val.BYTES_PER_ELEMENT, 'val')) {
                             console.log("Error: Error while decoding sequential indices");
                             return false;
                         }
@@ -100,7 +98,7 @@ function DecoderBuffer(buffer, data_size) {
                         var temp_val = {
                             val : new Uint16Array(1)
                         }
-                        if(!DecodeValue(this.buffer, temp_val, data_size, position, temp_val.val.BYTES_PER_ELEMENT, 'val')) {
+                        if(!this.buffer.DecodeValue(temp_vals, temp_val.val.BYTES_PER_ELEMENT, 'val')) {
                             console.log("Error: Error while decoding sequential indices");
                             return false;
                         }
@@ -116,7 +114,7 @@ function DecoderBuffer(buffer, data_size) {
                         var temp_val = {
                             val : new Uint32Array(1)
                         }
-                        if(!DecodeValue(this.buffer, temp_val, data_size, position, temp_val.val.BYTES_PER_ELEMENT, 'val')) {
+                        if(!this.buffer.DecodeValue(temp_val, temp_val.val.BYTES_PER_ELEMENT, 'val')) {
                             console.log("Error: Error while decoding sequential indices");
                             return false;
                         }
@@ -132,7 +130,7 @@ function DecoderBuffer(buffer, data_size) {
                         var temp_val = {
                             val : new Uint32Array(1)
                         }
-                        if(!DecodeValue(this.buffer, temp_val, data_size, position, temp_val.val.BYTES_PER_ELEMENT, 'val')) {
+                        if(!this.buffer.DecodeValue(temp_val, temp_val.val.BYTES_PER_ELEMENT, 'val')) {
                             console.log("Error: Error while decoding sequential indices");
                             return false;
                         }
@@ -153,26 +151,26 @@ function DecoderBuffer(buffer, data_size) {
         }
     
         // RAns decoding part
-        if(!DecodeSymbols(number_of_faces.num_faces * 3, 1, buffer, ind_buffer, 'indices_buffer', position, data_size, this.bitstream_version)) {
+        if(!DecodeSymbols(number_of_faces.num_faces * 3, 1, this.buffer, ind_buffer, 'indices_buffer')) {
             console.log("Error: While decoding sequential continuity data in decoding symbols");
             return false;
         }
         
         // Rest of the decoding and decompressing
-        last_index_value = new Uint32Array(0);
+        var last_index_value = new Uint32Array(1);
         last_index_value[0] = 0;
         var vertex_index = 0;
         for(let i = 0 ; i < number_of_faces.num_faces; ++i) {
-            face = new Uint32Array(3);
+            var face = new Uint32Array(3);
             for(let j = 0 ; j < 3 ; ++j) {
-                encoded_val = new Uint32Array(1);
+                var encoded_val = new Uint32Array(1);
                 encoded_val[0] = ind_buffer.indices_buffer[vertex_index++];
-                index_diff = new Uint32Array(1);
+                var index_diff = new Uint32Array(1);
                 index_diff[0] = (encoded_val[0] >> 1);
                 if(encoded_val[0] & 1) {
                     index_diff[0] = -index_diff[0];
                 }
-                index_value = new Uint32Array(1);
+                var index_value = new Uint32Array(1);
                 index_value[0] = index_diff[0] + last_index_value[0];
                 face[j] = index_value[0];
                 last_index_value[0] = index_value[0];
@@ -202,30 +200,11 @@ function DecoderBuffer(buffer, data_size) {
             }
         }
         return true;
-    } 
-
-} // DecodeBuffer End
-
-function Decoder(input_file) {
-    this.input_file_location = input_file;
-    // this.output_file_location = output_file;
-
-    // Decoding variables
-    var decode_buffer;
-
-    // Decoding methods
-    var mesh_sequential_encoding;
-    var mesh_edgebreaker_encoding;
-    
-    // Create an instance of decode buffer and save the buffer in it
-    this.CreateDecodeBuffer = function(buffer, size) {
-        decode_buffer = new DecoderBuffer(buffer, size);
     }
 
-    // Create and decode the header
-    this.DecodeHeader = function () {
+    this.DecodeHeader = function() {
         // Verify that it is a Draco file
-        if(!DecodeHeaderDRACOString(decode_buffer.buffer, Header, decode_buffer.data_size, position, Header.draco_string.byteLength)) {
+        if(!this.buffer.DecodeHeaderDRACOString(Header, Header.draco_string.byteLength)) {
             console.log("Error: Error while decoding header.");
             return false
         }        
@@ -235,31 +214,31 @@ function Decoder(input_file) {
         }
 
         // Get the version major
-        if(!DecodeValue(decode_buffer.buffer, Header, decode_buffer.data_size, position, Header.version_major.BYTES_PER_ELEMENT, 'version_major')) {
+        if(!this.buffer.DecodeValue(Header, Header.version_major.BYTES_PER_ELEMENT, 'version_major')) {
             console.log("Error: Error while decoding header Version Major.");
             return false;
         }
         
         // Get the version minor
-        if(!DecodeValue(decode_buffer.buffer, Header, decode_buffer.data_size, position, Header.version_minor.BYTES_PER_ELEMENT, 'version_minor')) {
+        if(!this.buffer.DecodeValue(Header, Header.version_minor.BYTES_PER_ELEMENT, 'version_minor')) {
             console.log("Error: Error while decoding header Version Minor.");
             return false;
         }
 
         // Get the encoder type
-        if(!DecodeValue(decode_buffer.buffer, Header, decode_buffer.data_size, position, Header.encoder_type.BYTES_PER_ELEMENT, 'encoder_type')) {
+        if(!this.buffer.DecodeValue(Header, Header.encoder_type.BYTES_PER_ELEMENT, 'encoder_type')) {
             console.log("Error: Error while decoding header encoder type.");
             return false;
         }
 
         // Get the encoder method
-        if(!DecodeValue(decode_buffer.buffer, Header, decode_buffer.data_size, position, Header.encoder_method.BYTES_PER_ELEMENT, 'encoder_method')) {
+        if(!this.buffer.DecodeValue(Header, Header.encoder_method.BYTES_PER_ELEMENT, 'encoder_method')) {
             console.log("Error: Error while decoding header encoder method.");
             return false;
         }
     
         // Get the flags
-        if(!DecodeValue(decode_buffer.buffer, Header, decode_buffer.data_size, position, Header.flags.BYTES_PER_ELEMENT, 'flags')) {
+        if(!this.buffer.DecodeValue(Header, Header.flags.BYTES_PER_ELEMENT, 'flags')) {
             console.log("Error: Error while decoding header flags.");
             return false;
         }
@@ -276,10 +255,11 @@ function Decoder(input_file) {
         let version_minor_ = Header.version_minor;
 
         // Check for version compatibility.
-        decode_buffer.SetBitstreamVersion(version_major_, version_minor_);
+        this.SetBitstreamVersion(version_major_, version_minor_);
 
-        if(decode_buffer.bitstream_version >= DracoBitstreamVersion(1, 3) && (Header.flags & METADATA_FLAG_MASK)) {
+        if(this.buffer.getBitstreamVersion() >= DracoBitstreamVersion(1, 3) && (Header.flags & METADATA_FLAG_MASK)) {
             // Decode Meta Data
+            // TODO
         }
 
         // Check for version compatibility
@@ -294,14 +274,46 @@ function Decoder(input_file) {
         }
 
         // Decode Connectivity
-        if(!decode_buffer.DecodeConnectivity()) {
+        if(!this.DecodeConnectivity()) {
             console.log("Error: Error while decoding Connectivity data");
             return false;
         }
 
         // Decode Attributes
-        
+        // TODO
 
+        return true;
+    }
+
+} // DecodeBuffer End
+
+function Decode() {
+    // Decoding variables
+    this.decode_buffer;
+
+    // Decoding methods
+    var mesh_sequential_encoding;
+    var mesh_edgebreaker_encoding;
+    
+    // Create an instance of decode buffer and save the buffer in it
+    this.CreateDecodeBuffer = function(buffer, size) {
+        this.decode_buffer = new Decoder(buffer, size);
+    }
+
+    // Create and decode the header
+    this.DecodeHeader = function () {
+        if(!this.decode_buffer.DecodeHeader()) {
+            console.log("Error: The header is invalid, please check your .drc encoded file");
+            return false;
+        }
+        return true;
+    }
+
+    this.Decode = function() {
+        if(!this.decode_buffer.Decode()) {
+            console.log("Error: There was an error while decoding the data");
+            return false;
+        }   
         return true;
     }
 
@@ -322,10 +334,6 @@ function Decoder(input_file) {
         console.log("Encoder Method: " + Header.encoder_method);
         console.log("Flags: " + Header.flags);
     }
-
-    this.PrintPos = function() {
-        console.log(pos);
-    }
 }
 
-module.exports = Decoder;
+module.exports = Decode;
